@@ -12,6 +12,12 @@ We are currently tidying up the code and will open‑source it once the paper is
 To install requirements:
 
 ```setup
+cd submodules
+unzip diff-gaussian-rasterization.zip
+unzip diff-gaussian-rasterization_analyse.zip
+unzip fused-ssim.zip
+unzip simple-knn.zip
+cd ..
 conda env create --file environment.yml
 ```
 
