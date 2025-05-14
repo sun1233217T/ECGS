@@ -1,7 +1,7 @@
 
-# GEC: Extinction Coordination for Enhanced 3D Gaussian Splatting
+# ECGS: Extinction Coordination for Enhanced 3D Gaussian Splatting
 
-This repository is the official implementation of [GEC: Extinction Coordination for Enhanced 3D Gaussian Splatting]. 
+This repository is the official implementation of [ECGS: Extinction Coordination for Enhanced 3D Gaussian Splatting]. 
 
 This is a preview for review purposes only.
 
