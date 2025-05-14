@@ -1,4 +1,3 @@
-# adapted from https://github.com/jzhangbs/DTUeval-python
 import numpy as np
 import open3d as o3d
 import sklearn.neighbors as skln

@@ -39,18 +39,7 @@ class FSQQuantizer(nn.Module):
     def __init__(self):
         super(FSQQuantizer, self).__init__()
         self.quent_range = 2
-
-    # def forward(self, x):
-    #     # 前向做离散量化
-    #     x_q = torch.where(x < -0.5, torch.full_like(x, -1),
-    #           torch.where(x > 0.5, torch.full_like(x, 1),
-    #                       torch.zeros_like(x)))
-        
-    #     # 使用 Straight-Through Estimator：反向直接使用 x 的梯度
-    #     return x + (x_q - x).detach()
-
     def forward(self, x):
-        # 先对 x 四舍五入到最接近的整数，再裁剪到 [-2, 2]
         x_q = torch.clamp(torch.round(x), -self.quent_range, self.quent_range)
         return x + (x_q - x).detach()
 
@@ -61,27 +50,19 @@ class FSQDecoder(nn.Module):
         input_dim: 量化输入的通道数，可选 8 或 16
         """
         super(FSQDecoder, self).__init__()
-        self.fc1 = nn.Linear(input_dim, inner_dim)  # 第一层，全连接
-        self.fc2 = nn.Linear(inner_dim, inner_dim // 2)         # 第二层，降维
-        # io_dim = inner_dim // 2
-        # if io_dim >= 24:                         # 如果 io_dim 大于 24，增加一层
-        #     self.fc3 = nn.Sequential(
-        #         nn.Linear(io_dim, io_dim // 2),
-        #         nn.ReLU(),
-        #         nn.Linear(io_dim // 2, output_dim) 
-        #     )
-        # else:
-        self.fc3 = nn.Linear(inner_dim // 2, output_dim)    # 输出层，单个 float32 值
+        self.fc1 = nn.Linear(input_dim, inner_dim)
+        self.fc2 = nn.Linear(inner_dim, inner_dim // 2)
+        self.fc3 = nn.Linear(inner_dim // 2, output_dim)
     
     def forward(self, x):
-        x = x.float()  # 确保输入为 float 类型
-        x = F.relu(self.fc1(x))  # ReLU 激活函数
+        x = x.float()  
+        x = F.relu(self.fc1(x))  
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)  # 最后一层无激活，输出 float32 值
+        x = self.fc3(x) 
         return x
     
 class InverseDecoder(nn.Module):
-    def __init__(self, output_dim=8, inner_dim = 32, input_dim = 3):  # 必须知道原来的维度
+    def __init__(self, output_dim=8, inner_dim = 32, input_dim = 3):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, inner_dim // 2)
         self.fc2 = nn.Linear(inner_dim // 2, inner_dim)
@@ -90,7 +71,7 @@ class InverseDecoder(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return torch.tanh(self.fc3(x))  # 输出范围控制在 [-1, 1]，接近 FSQ 范围
+        return torch.tanh(self.fc3(x))  
     
 class ScaleStatFSQQuantizer(nn.Module):
     def __init__(self,self_quantizer=False,up_thresh = 0.75, down_thresh = 0.25, temperature =0.5):
@@ -104,9 +85,9 @@ class ScaleStatFSQQuantizer(nn.Module):
 
     def STE_forward(self, x, last_x = None, only_last_stat = False):
         x = self.en(x)
-        x = self.sm(x) # 归一化到 [0,1]
+        x = self.sm(x) 
         
-        # 前向做离散量化, 量化{0,1}
+
         if last_x is None:
             x_q = torch.where(x > 0.5, torch.full_like(x, 1),
                           torch.zeros_like(x))
@@ -114,17 +95,12 @@ class ScaleStatFSQQuantizer(nn.Module):
             assert last_x is not None
             return x + (last_x - x).detach()
         else:
-            # 滞后离散化逻辑
-            # 如果 last_x == 1, 只有 x < down_thresh 才变成 0
             turn_1 = (last_x == 0) & (x >= self.up_thresh)
-            # 如果 last_x == 0, 只有 x > up_thresh 才变成 1
             turn_0 = (last_x == 1) & (x <= self.down_thresh)
 
             x_q = torch.where(turn_1, torch.ones_like(x),
                 torch.where(turn_0, torch.zeros_like(x), last_x))
             
-        
-        # 使用 Straight-Through Estimator：反向直接使用 x 的梯度
         return x + (x_q - x).detach()
     
     def sample_gumbel(self, shape, eps=1e-10):
@@ -133,52 +109,38 @@ class ScaleStatFSQQuantizer(nn.Module):
         return -torch.log(-torch.log(U + eps) + eps)
 
     def forward(self, x, last_x=None, only_last_stat=False):
-        #Gumbel Softmax 量化
-        # 提取特征和归一化到 [0,1]
-        x = self.en(x)
-        x = torch.sigmoid(x)  # 这里 x 被解释为取 1 的概率
 
-        # 当 only_last_stat 为 True 时，直接用上一步状态（不改变梯度路径）
+        x = self.en(x)
+        x = torch.sigmoid(x)  
+
         if last_x is not None and only_last_stat:
             return x + (last_x - x).detach()
 
-        # 构造二分类问题的 logits
-        # 对于二值量化，我们认为类别 1 的概率为 x，类别 0 的概率为 (1-x)
-        eps = 1e-10  # 防止对数不稳定
-        # logits 分量：log(1-x) 与 log(x)
+        eps = 1e-10  
         logits_0 = torch.log(1 - x + eps)
         logits_1 = torch.log(x + eps)
 
-        # 加入 Gumbel 噪声：分别为类别 0 和类别 1 采样
         gumbel_0 = self.sample_gumbel(x.shape, eps)
         gumbel_1 = self.sample_gumbel(x.shape, eps)
 
-        # 加入噪声并除以温度（temperature 决定平滑程度，训练初期可设置较大，后期退火）
         noisy_logits_0 = (logits_0 + gumbel_0) / self.temperature
         noisy_logits_1 = (logits_1 + gumbel_1) / self.temperature
 
-        # 将两种 logits 组合为二维张量，最后一维表示类别 0 和 1
         logits = torch.stack([noisy_logits_0, noisy_logits_1], dim=-1)
-        # 使用 softmax 得到近似 one-hot 的概率分布
+
         probs = F.softmax(logits, dim=-1)
-        # “离散量化”结果取类别 1 的概率，当温度趋于 0 时，该概率趋向于 {0,1}
+
         x_q_candidate = probs[..., 1]
 
-        # 如果提供 last_x，则可使用延迟更新逻辑以抑制频繁跳变
+
         if last_x is not None:
-            # 这里延迟逻辑与之前类似：
-            # 如果 last_x 接近 0，只有当候选值超过上阈值时才更新为 1
             turn_1 = (last_x < 0.5) & (x_q_candidate >= self.up_thresh)
-            # 如果 last_x 接近 1，只有当候选值低于下阈值时才更新为 0
             turn_0 = (last_x >= 0.5) & (x_q_candidate <= self.down_thresh)
-            # 根据延迟逻辑，决定最终的离散化状态（注意：此处用 torch.where 做硬更新，若希望保持完全连续可微，可考虑引入软门限）
             x_q = torch.where(turn_1, torch.ones_like(x),
                       torch.where(turn_0, torch.zeros_like(x), last_x))
         else:
             x_q = x_q_candidate
 
-        # 使用类似 STE 的技巧：
-        # 前向返回离散化的结果，但反向传播梯度还是从连续采样 x 得到
         return x + (x_q - x).detach()
 
 class GaussianModel:
@@ -804,29 +766,21 @@ class GaussianModel:
         # pearson_r = correlation_matrix[0, 1]
         # logger.debug(f"Correlation between grads and denom: {pearson_r}")
 
-        '''
-        统计去趋势(Residual Correction)
-        '''
 
-        # 假设 grads 和 denom 已经过滤过无效的部分，并展平为一维向量
+
         valid_mask = grads > 0
         grads_valid = grads[valid_mask]
-        denom_valid = self.denom[valid_mask].unsqueeze(1)  # 转为列向量
+        denom_valid = self.denom[valid_mask].unsqueeze(1)  
 
-        # 加入偏置项
         X = torch.cat([denom_valid, torch.ones_like(denom_valid)], dim=1)  # [N, 2]
-        # 求解线性回归参数 (正规方程)
         theta = torch.linalg.lstsq(X, grads_valid.unsqueeze(1)).solution
 
-        # 计算拟合值并求残差
         fitted = (X @ theta).squeeze()
         residuals = grads_valid - fitted
 
-        # 标准化 denom（只对有效数据进行）
         denom_norm = (self.denom[valid_mask] - self.denom[valid_mask].mean()) / self.denom[valid_mask].std()
         beta = grad_demon_beta * (residuals.std()) 
 
-        # 用 residuals 替换 grads_valid 来获得去趋势后的梯度
         grads_corrected = grads.clone()
         grads_corrected[valid_mask] = residuals + beta * denom_norm
 
@@ -853,7 +807,7 @@ class GaussianModel:
         self.tmp_radii = None
 
         if self.scale_stat_quant:
-            # 始终保持scale_stat在0到1之间
+
             new_scale_stat = torch.clamp(self.scale_stat, min=0.0, max=1.0)
             optimizable_tensors = self.replace_tensor_to_optimizer(new_scale_stat, "scale_stat")
             self.scale_stat = optimizable_tensors["scale_stat"]
@@ -1010,10 +964,10 @@ class GaussianModel:
         erank = self.get_erank()
         if mode == 0:
             s3 = self.get_scaling.min(dim=-1).values if use_2d_restrict else 0
-            # 计算 L_erank
-            log_term = torch.log(erank - 1 + epsilon)  # 计算 log(erank(Gk) - 1 + epsilon)
-            penalty = torch.clamp(-log_term, min=0)  # max(-log_term, 0)
-            L_erank = (lambda_erank * penalty + s3).mean()  # 损失函数求和
+
+            log_term = torch.log(erank - 1 + epsilon)  
+            penalty = torch.clamp(-log_term, min=0)  
+            L_erank = (lambda_erank * penalty + s3).mean()  
         elif mode == 1:
             penalty = torch.pow(erank, 4) - 6 * torch.pow(erank, 3) + 13 * torch.pow(erank, 2) - 12 * (erank) + 4 - 0.05 * torch.pow(erank - 2, 2) * torch.pow(erank - 0.4, 2)
             L_erank = (lambda_erank * penalty).mean()
