@@ -29,21 +29,17 @@ def save_depth_as_colormap(depth_tensor, save_path):
         depth_tensor (torch.Tensor): 单通道深度图，形状为 (H, W) 或 (1, H, W)，值域任意。
         save_path (str): 保存路径，文件名需带 .png 后缀。
     """
-    # 确保 Tensor 形状为 (H, W)
     if depth_tensor.ndim == 3:
-        depth_tensor = depth_tensor.squeeze(0)  # 去掉单通道维度
+        depth_tensor = depth_tensor.squeeze(0)  
     
-    # 转为 numpy，归一化到 0-255
+
     depth_np = depth_tensor.cpu().numpy()
     depth_norm = cv2.normalize(depth_np, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    
-    # 应用伪彩色
-    color_mapped = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET)  # 你也可以换其他色图
-    
-    # 转回 Tensor 并调整通道顺序 (H, W, C) -> (C, H, W)
-    color_tensor = torch.from_numpy(color_mapped).permute(2, 0, 1).float() / 255.0  # 标准化到 [0, 1]
-    
-    # 保存图像
+
+    color_mapped = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET) 
+
+    color_tensor = torch.from_numpy(color_mapped).permute(2, 0, 1).float() / 255.0 
+
     torchvision.utils.save_image(color_tensor, save_path)
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh):
