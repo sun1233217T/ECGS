@@ -42,6 +42,6 @@ python eval.py -s data/to/path/ -m path/to/trained/
 
 ## Pre-trained Models
 
-Our pretrained model could be found in supplementary materials.
+Our pretrained model could be found in ```dtu_out/```, and could be palyed using the 3DGS official SIBR_viewer.
 
 
