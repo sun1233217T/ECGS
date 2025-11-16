@@ -160,11 +160,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if opt.app_opc_opc_loss and iteration > 500 and gaussians.app_opacity_mask.sum() > 0 and iteration < opt.cat_low_app_opc_until_iter:
             app_opacities = render_pkg["app_opacity"]
             # debug()
-            # app_opc_loss = (gaussians.get_opacity - gaussians.app_opacity).pow(3).mean() # new_app_opc_opc_loss_1
-            # app_opc_loss = (gaussians.get_opacity / (gaussians.app_opacity + 1e-3)).mean() # new_app_opc_opc_loss_2
-            app_opc_loss =  ((gaussians.get_opacity / (app_opacities + 1e-4)) * gaussians.app_opacity_mask).mean() # new_app_opc_opc_loss_4
+            # app_opc_loss = (gaussians.get_opacity - gaussians.app_opacity).pow(3).mean() 
+            # app_opc_loss = (app_opacities * torch.log(gaussians.get_opacity) + (1 - app_opacities) * torch.log(1 - gaussians.get_opacity)).mean() 
+            app_opc_loss =  ((gaussians.get_opacity / (app_opacities + 1e-4)) * gaussians.app_opacity_mask).mean()
             # debug()
-            # app_opc_loss = - torch.log(gaussians.app_opacity / (gaussians.get_opacity + 1e-4) + 1e-4).mean() # new_app_opc_opc_loss_3
             loss += app_opc_loss * opt.app_opc_opc_loss
         else:
             app_opc_loss = 0
