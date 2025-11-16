@@ -15,7 +15,7 @@ from utils.general_utils import strip_symmetric, build_scaling_rotation
 import math
 from tqdm import tqdm
 
-from mtools import logger, do_once, debug, auto_counter, debug_after_n_iters
+from mtools import logger, do_once, debug
 logger.set_logger_skip_iters(logger, 100)
 try:
     from diff_gaussian_rasterization import SparseGaussianAdam
@@ -1131,7 +1131,6 @@ class GaussianModel:
         # logger.info(f"Shape loss: {loss.item()}")
         return loss
     
-    @auto_counter
     def tmp_save(self, new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation, new_app_opacity, count = 0):
         path = r"tmp_save/{}.ply".format(count)
 
