@@ -29,7 +29,7 @@ try:
 except:
     SPARSE_ADAM_AVAILABLE = False
 
-from mtools import debug, logger, debug_after_n_iters
+from mtools import debug, logger
 logger.setLevel("INFO")
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
