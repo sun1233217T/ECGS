@@ -6,6 +6,7 @@ try:
 except Exception as e:
 
     debug = lambda:None
+debug_after_n_iters = lambda:None
 
 def unique_identifier_decorator(func):
     def wrapper(*args, **kwargs):
@@ -32,3 +33,4 @@ def do_once(unique_id, func, *args, **kwargs):
         do_once_dict[unique_id] = 1
         return func(*args, **kwargs)
     return None
+
